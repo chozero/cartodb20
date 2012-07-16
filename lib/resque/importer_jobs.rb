@@ -8,6 +8,7 @@ module Resque
 
     def self.perform(meta_id, user_id, table_name, data_source, table_id = nil, append = false, migrate_table = nil, table_copy = nil, from_query = nil)
 
+      require 'ruby-debug'; debugger
       DataImport.create( :queue_id      => meta_id,
                          :user_id       => user_id,
                          :table_id      => table_id,
