@@ -1,10 +1,11 @@
 # coding: UTF-8
 
 class Api::Json::TablesController < Api::ApplicationController
-  ssl_required :index, :show, :update, :destroy, :set_infowindow, :duplicate, :set_map_metadata, :get_map_metadata
+  ssl_required :index, :show, :create, :update, :destroy, :set_infowindow, :duplicate, :set_map_metadata, :get_map_metadata
 
   before_filter :load_table, :except => [:index, :create]
   before_filter :set_start_time
+  #before_filter :link_ghost_tables
   after_filter  :record_query_threshold
 
   def index
@@ -80,7 +81,23 @@ class Api::Json::TablesController < Api::ApplicationController
   def update
     warnings = []
 
-    @table.set_all(params)
+    # Perform name validations
+    # TODO move this to the model!
+    unless params[:name].nil? 
+      if params[:name].downcase != @table.name
+        owner = User.select(:id,:database_name,:crypted_password,:quota_in_bytes,:username, :private_tables_enabled, :table_quota).filter(:id => current_user.id).first
+        if params[:name] =~ /^[0-9_]/
+          raise "Table names can't start with numbers or dashes."
+        elsif owner.tables.filter(:name.like(/^#{params[:name]}/)).select_map(:name).include?(params[:name].downcase)
+          raise "Table '#{params[:name].downcase}' already exists."
+        else
+          @table.set_all(:name => params[:name].downcase)
+          @table.save(:name)
+        end
+      end
+    end
+
+    @table.set_except(params, :name)
     if params.keys.include?("latitude_column") && params.keys.include?("longitude_column")
       latitude_column  = params[:latitude_column]  == "nil" ? nil : params[:latitude_column].try(:to_sym)
       longitude_column = params[:longitude_column] == "nil" ? nil : params[:longitude_column].try(:to_sym)
@@ -93,18 +110,6 @@ class Api::Json::TablesController < Api::ApplicationController
                             from user_tables
                             where id=?",@table.id).first
 
-      # wont allow users to set a table to same name, sends error
-      unless params[:name].blank?
-        if params[:name].downcase != @table.name
-          owner = User.select(:id,:database_name,:crypted_password,:quota_in_bytes,:username, :private_tables_enabled, :table_quota).filter(:id => current_user.id).first
-          if params[:name][0].match(/[^0-9]/).nil?
-            warnings << "Table names can't start with a number."
-          elsif owner.tables.filter(:name.like(/^#{params[:name]}/)).select_map(:name).include?(params[:name].downcase)
-          #raise "Table name already exists"
-            warnings << "Table '#{params[:name].downcase}' already existed"
-          end
-        end
-      end
       render_jsonp(@table.public_values.merge(warnings: warnings))
     else
       render_jsonp({ :errors => @table.errors.full_messages}, 400)
@@ -136,6 +141,7 @@ class Api::Json::TablesController < Api::ApplicationController
   end
 
   protected
+
   def load_table
     @table = Table.find_by_identifier(current_user.id, params[:id])
   end
@@ -149,5 +155,10 @@ class Api::Json::TablesController < Api::ApplicationController
           CartoDB::QueriesThreshold.incr(current_user.id, "other", Time.now - @time_start)
       end
     end
+  end
+
+  def link_ghost_tables
+    return true unless current_user.present?
+    current_user.link_ghost_tables
   end
 end

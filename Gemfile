@@ -1,6 +1,6 @@
 source 'http://rubygems.org'
 
-gem "rails",                   "3.2.0"
+gem "rails",                   "3.2.2"
 
 gem "rake",                    "0.9.2.2"
 gem "pg",                      "0.11"
@@ -32,6 +32,8 @@ gem "airbrake",                "3.0.9"
 gem "nokogiri",                "1.5.3"
 gem "statsd-client",           "0.0.7", :require => "statsd"
 
+gem "addressable",             "2.2.8", :require => "addressable/uri"
+
 gem "ejs",                     "~> 1.1.1"
 group :assets do
   gem 'sass-rails',            "~> 3.2.3"
@@ -41,6 +43,7 @@ group :assets do
   gem 'compass-rails',         "~> 1.0.1"
   gem 'chunky_png',            "~> 1.2.6"
   gem 'oily_png',              "~> 1.0.2"
+  gem 'mustache-trimmer',      :git => 'https://github.com/josh/mustache-trimmer.git'
 end
 
 gem "newrelic_rpm",            "~> 3.4.1"
@@ -70,7 +73,7 @@ group :development, :test do
   gem "mocha",                 "0.10.5"
 
   # TODO fix debugger readline conflicts with resque
-  gem "debugger", "1.2.0"
+  #gem "debugger", "1.2.0"
 
   gem "steak",                 "2.0.0"
   gem "rspec-rails",           "2.10.1"

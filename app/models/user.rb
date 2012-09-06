@@ -6,12 +6,14 @@ class User < Sequel::Model
   one_to_one :client_application
   one_to_many :tokens, :class => :OauthToken
   one_to_many :maps
-  plugin :association_dependencies, :maps => :destroy
+  many_to_many :layers, :order => :id
+  plugin :association_dependencies, :maps => :destroy, :layers => :nullify
 
   # Sequel setup & plugins
   set_allowed_columns :email, :map_enabled, :password_confirmation, :quota_in_bytes, :table_quota, :account_type, :private_tables_enabled
   plugin :validation_helpers
   plugin :json_serializer
+
 
   # Restrict to_json attributes
   @json_serializer_opts = {
@@ -24,6 +26,8 @@ class User < Sequel::Model
                  :map_enabled],
     :naked => true # avoid adding json_class to result
   }
+
+  SYSTEM_TABLE_NAMES = %w( spatial_ref_sys geography_columns geometry_columns raster_columns raster_overviews )
 
   self.raise_on_typecast_failure = false
   self.raise_on_save_failure = false
@@ -92,8 +96,8 @@ class User < Sequel::Model
   def database_username
     if Rails.env.production?
       "cartodb_user_#{id}"
-    #elsif Rails.env.staging?
-    #  "cartodb_staging_user_#{self.id}"
+    elsif Rails.env.staging?
+      "cartodb_staging_user_#{self.id}"
     else
       "#{Rails.env}_cartodb_user_#{id}"
     end
@@ -286,6 +290,29 @@ class User < Sequel::Model
     size / 2
   end
 
+  # Looks for tables created on the user database
+  # but not linked to the Rails app database. Creates
+  # required records to link them
+  def link_ghost_tables
+    real_tables = self.in_database(:as => :superuser)
+                      .select(:tablename).from(:pg_tables)
+                      .where(:tableowner => self.database_username)
+                      .all.map {|t| t[:tableownername]} - SYSTEM_TABLE_NAMES
+
+    ghost_tables = (real_tables - self.tables.select(:name).map(&:name)).compact
+
+    ghost_tables.each do |t| 
+      table = Table.new
+      table.user_id = self.id
+      table.migrate_existing_table = t
+      begin
+        table.save
+      rescue Sequel::DatabaseError => e
+        raise unless e.message =~ /must be owner of relation/
+      end
+    end
+  end
+
   def exceeded_quota?
     self.over_disk_quota? || self.over_table_quota?
   end
@@ -334,8 +361,8 @@ class User < Sequel::Model
       self.database_name = case Rails.env
         when 'development'
           "cartodb_dev_user_#{self.id}_db"
-        #when 'staging'
-        #  "cartodb_staging_user_#{self.id}_db"
+        when 'staging'
+          "cartodb_staging_user_#{self.id}_db"
         when 'test'
           "cartodb_test_user_#{self.id}_db"
         else
