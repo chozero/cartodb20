@@ -1,9 +1,6 @@
 #encoding: UTF-8
 class Api::Json::ImportsController < Api::ApplicationController
-
-  if Rails.env.production? || Rails.env.staging?
-    ssl_required :index, :show, :create
-  end
+  ssl_required :index, :show, :create
 
   def index
     imports = DataImport.filter(:user_id => current_user.id).all

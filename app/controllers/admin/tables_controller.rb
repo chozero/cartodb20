@@ -3,7 +3,6 @@
 class Admin::TablesController < ApplicationController
   ssl_required :index, :show, :embed_map, :show_public, :index_public
 
-  skip_before_filter :check_domain,                :only => [:embed_map, :show, :show_public]
   skip_before_filter :browser_is_html5_compliant?, :only => [:embed_map]  
   before_filter      :login_required,              :only => [:index]
   after_filter       :update_user_last_activity,   :only => [:index, :show]
@@ -59,7 +58,9 @@ class Admin::TablesController < ApplicationController
     @subdomain  = request.subdomain
     @table      = Table.find_by_subdomain(@subdomain, params[:id])
     @tilejson_base = @table.map.layers.first.to_tilejson
-    @tilejson_data = @table.map.layers.last.to_tilejson
+    data_layer = @table.map.layers.last.public_values
+    @layer_data = data_layer['options'].to_json
+    @layer_data_infowindow = data_layer['infowindow'].to_json
     
     if @table.blank? || @table.private?
       head :forbidden
