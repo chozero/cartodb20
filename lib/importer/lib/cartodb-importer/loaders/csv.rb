@@ -89,12 +89,11 @@ module CartoDB
           column_names = @db_connection.schema(@working_data[:suggested_name]).map{ |s| s[0].to_s }
           if column_names.include? "the_geom"
             @data_import.log_update("update the_geom")
-            if res = @db_connection["select the_geom from #{@working_data[:suggested_name]} WHERE the_geom is not null and the_geom != '' limit 1"].first
+            if res = @db_connection["select GeometryType(ST_AsEWKT(the_geom)) as geometry_type from #{@working_data[:suggested_name]} WHERE the_geom is not null and the_geom != '' limit 1"].first
 
               # attempt to read as geojson. If it fails, continue
               begin
-                geojson       = RGeo::GeoJSON.decode(res[:the_geom], :json_parser => :json)
-                geometry_type = geojson.geometry_type.type_name.upcase
+                geometry_type = res[:geometry_type]
 
                 if geometry_type
                   # move original geometry column around
@@ -112,17 +111,9 @@ module CartoDB
                   # WHERE the_geom_orig IS NOT NULL")
                   # tokumine ticket: http://trac.osgeo.org/postgis/ticket/1434
                   @data_import.log_update("converting GeoJSON to the_geom")
-                  @db_connection["select the_geom_orig from #{@working_data[:suggested_name]} where the_geom_orig != '' and the_geom_orig is not null "].each do |res|
-                    begin
-                      geojson = RGeo::GeoJSON.decode(res[:the_geom_orig], :json_parser => :json)
-                      if geojson
-                        @db_connection.run("UPDATE #{@working_data[:suggested_name]} SET the_geom = ST_GeomFromText('#{geojson.as_text}', 4326) WHERE the_geom IS NULL AND the_geom_orig = '#{res[:the_geom_orig]}';");
-                      end
-                    rescue => e
-                      @runlog.err << "silently fail conversion #{geojson.inspect} to #{@working_data[:suggested_name]}. #{e.inspect}"
-                      @data_import.log_error("ERROR: silently fail conversion #{geojson.inspect} to #{@working_data[:suggested_name]}. #{e.inspect}")
-                    end
-                  end
+                  require 'debugger'; debugger
+                  @db_connection.run("UPDATE #{@working_data[:suggested_name]} SET the_geom = ST_SetSRID(ST_GeomFromGeoJSON(ST_AsGeoJSON(the_geom_orig)), 4326) WHERE the_geom IS NULL AND the_geom_orig IS NOT NULL");
+
                   # Drop original the_geom column
                   @db_connection.run("ALTER TABLE #{@working_data[:suggested_name]} DROP COLUMN the_geom_orig")
                 end

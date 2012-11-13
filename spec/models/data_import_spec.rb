@@ -84,10 +84,10 @@ describe DataImport do
       :data_source   => '/../db/fake_data/clubbing.csv',
       :updated_at    => Time.now )
 
-    table = Table.filter(:name => 'clubbing').first
+    table = Table.filter(:name => 'clubbing').all.last
     table.records.count.should be == 4
 
-    file = File.new(Rails.root.join('tmp/clubbing.sql.zip', ), 'w+')
+    file = File.new(Rails.root.join('tmp/clubbing.sql.zip'), 'w+')
     file.write table.to_sql
     file.close
 
@@ -100,7 +100,7 @@ describe DataImport do
 
     File.delete(file.path)
 
-    table = Table.filter(:name => 'clubbing').first
+    table = Table.filter(:name => 'clubbing').all.last
     table.records.count.should be == 4
   end
 
@@ -117,5 +117,15 @@ describe DataImport do
     table.records[:rows].last[:created_at].to_s.should  == Time.at(1351698390354 / 1000).to_s
     table.records[:rows].last[:updated_at].to_s.should  == Time.at(1351698390354 / 1000).to_s
 
+  end
+
+  it "can import csv with a the_geom column in WKB format" do
+    data_import = DataImport.create(
+      :user_id       => @user.id,
+      :data_source   => '/../db/fake_data/polygons_wkb.csv',
+      :updated_at    => Time.now )
+
+    table = Table.all.last
+    table.run_query("SELECT GeometryType(the_geom) FROM #{table.name}")[:rows].select{|r| r[:geometrytype] == 'MULTIPOLYGON'}.should have(4).items
   end
 end
